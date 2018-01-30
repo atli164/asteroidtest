@@ -15,7 +15,6 @@ enum ctrlkeys {
 bool keys[5] = {false, false, false, false, false};
 
 double x = 0, y = 0;
-double camera_x, camera_y;
 double dx = 0, dy = 0;
 double theta = 0; 
 bool firing = false;
@@ -41,10 +40,10 @@ void drawframe(bool &draw) {
     if(draw && al_is_event_queue_empty(evq)) {
         al_set_target_bitmap(buf);
         al_clear_to_color(al_map_rgb(0, 0, 0));
-        al_draw_bitmap(shp, x - camera_x, y - camera_y, 0);
+        al_draw_bitmap(shp, x, y, 0);
         al_set_target_backbuffer(dsp);
         al_clear_to_color(al_map_rgb(0, 0, 0));
-        al_draw_scaled_bitmap(buf, 0, 0, scr_x, scr_y, scale_x, scale_y, scale_w, scale_h, 0);
+        al_draw_scaled_bitmap(buf, 0, 0, x - scr_x / 2, y - scr_y / 2, scale_x, scale_y, scale_w, scale_h, 0);
         draw = false;
     }
 }
@@ -104,8 +103,6 @@ int main(int argc, char **argv) {
 
     scr_x = al_get_display_width(dsp);
     scr_y = al_get_display_height(dsp);
-    camera_x = x - scr_x / 2;
-    camera_y = y - scr_y / 2;
     double scale_x = scr_x / init_sz;
     double scale_y = scr_y / init_sz;
     double scale_mn = std::min(scale_x, scale_y);
