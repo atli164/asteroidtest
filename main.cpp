@@ -1,104 +1,201 @@
 #include <iostream>
+#include <vector>
+#include <math.h>
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_image.h>
 
-const float FPS = 60;
+const double FPS = 60;
+const double pi = acos(-1);
+const int init_sz = 200;
+
+enum ctrlkeys {
+    up, down, left, right, fire
+};
+
+bool keys[5] = {false, false, false, false, false};
+
+double x = 0, y = 0;
+double camera_x, camera_y;
+double dx = 0, dy = 0;
+double theta = 0; 
+bool firing = false;
+double zoom = 1.0;
+int scr_x, scr_y;
+double scale_w, scale_h, scale_x, scale_y;
+
+ALLEGRO_DISPLAY *dsp = NULL;
+ALLEGRO_BITMAP *buf = NULL;
+ALLEGRO_EVENT_QUEUE *evq = NULL;
+ALLEGRO_TIMER *tmr = NULL;
+ALLEGRO_BITMAP *shp = NULL;
+
+void destruction() {
+    al_destroy_timer(tmr);
+    al_destroy_display(dsp);
+    al_destroy_bitmap(buf);
+    al_destroy_event_queue(evq);
+    al_destroy_bitmap(shp);
+}
+
+void drawframe(bool &draw) {
+    if(draw && al_is_event_queue_empty(evq)) {
+        al_set_target_bitmap(buf);
+        al_clear_to_color(al_map_rgb(0, 0, 0));
+        al_draw_bitmap(shp, x - camera_x, y - camera_y, 0);
+        al_set_target_backbuffer(dsp);
+        al_clear_to_color(al_map_rgb(0, 0, 0));
+        al_draw_scaled_bitmap(buf, 0, 0, scr_x, scr_y, scale_x, scale_y, scale_w, scale_h, 0);
+        draw = false;
+    }
+}
 
 int main(int argc, char **argv) {
     
-    ALLEGRO_DISPLAY *display = NULL;
-    ALLEGRO_EVENT_QUEUE *event_queue = NULL;
-    ALLEGRO_TIMER *timer = NULL;
-    ALLEGRO_BITMAP *image = NULL;
-    
     if(!al_init()) {
         std::cerr << "Failed to initialize Allegro." << std::endl;
+        destruction();
         return -1;
     }
 
     if(!al_init_image_addon()) {
         std::cerr << "Failed to initialize image addon." << std::endl;
+        destruction();
         return -1;
     }
-    
-    timer = al_create_timer(1.0 / FPS);
-    if(!timer) {
+
+    if(!al_install_keyboard()) {
+        std::cerr << "Failed to install keyboard." << std::endl;
+        destruction();
+        return -1;
+    }
+
+    tmr = al_create_timer(1.0 / FPS);
+    if(!tmr) {
         std::cerr << "Failed to make timer." << std::endl;
+        destruction();
         return -1;
     }
 
-    display = al_create_display(400, 400);
-    if(!display) {
+    al_set_new_display_flags(ALLEGRO_FULLSCREEN_WINDOW);
+    dsp = al_create_display(init_sz, init_sz);
+    if(!dsp) {
         std::cerr << "Failed to create display." << std::endl;
-        al_destroy_timer(timer);
+        destruction();
         return -1;
     }
 
-    event_queue = al_create_event_queue();
-    if(!event_queue) {
+    evq = al_create_event_queue();
+    if(!evq) {
         std::cerr << "Failed to create event queue." << std::endl;
-        al_destroy_display(display);
-        al_destroy_timer(timer);
-    }
-
-    image = al_load_bitmap("ship.png");
-    if(!image) {
-        std::cerr << "Failed to load bitmap." << std::endl;
-        al_destroy_display(display);
-        al_destroy_timer(timer);
-        al_destroy_event_queue(event_queue);
+        destruction();
         return -1;
     }
 
-    al_register_event_source(event_queue, al_get_display_event_source(display));
-    al_register_event_source(event_queue, al_get_timer_event_source(timer));
+    al_register_event_source(evq, al_get_display_event_source(dsp));
+    al_register_event_source(evq, al_get_timer_event_source(tmr));
+    al_register_event_source(evq, al_get_keyboard_event_source());
+
+    shp = al_load_bitmap("ship.png");
+    if(!shp) {
+        std::cerr << "Failed to ship load bitmap." << std::endl;
+        destruction();
+        return -1;
+    }
+
+    scr_x = al_get_display_width(dsp);
+    scr_y = al_get_display_height(dsp);
+    camera_x = x - scr_x / 2;
+    camera_y = y - scr_y / 2;
+    double scale_x = scr_x / init_sz;
+    double scale_y = scr_y / init_sz;
+    double scale_mn = std::min(scale_x, scale_y);
+    scale_w = init_sz * scale_mn;
+    scale_h = init_sz * scale_mn;
+    scale_x = (scr_x - scale_w) / 2;
+    scale_y = (scr_y - scale_h) / 2;
+
+    buf = al_create_bitmap(scr_x, scr_y);
+    if(!buf) {
+        std::cerr << "Failed to initialize buffer bitmap." << std::endl;
+        destruction();
+        return -1;
+    }
 
     al_clear_to_color(al_map_rgb(0, 0, 0));
     al_flip_display();
 
-    al_start_timer(timer);
+    al_start_timer(tmr);
 
-    bool running = true;
+    bool run = true;
     bool draw = true;
 
-    float x = 200, y = 200;
-    float dx = 0, dy = 0;
+    while(run) {
+        ALLEGRO_EVENT evt;
+        ALLEGRO_TIMEOUT tmout;
 
-    while(running) {
-        ALLEGRO_EVENT event;
-        ALLEGRO_TIMEOUT timeout;
+        al_init_timeout(&tmout, 1 / FPS);
 
-        al_init_timeout(&timeout, 0.06);
+        bool gevt = al_wait_for_event_until(evq, &evt, &tmout);
 
-        bool get_event = al_wait_for_event_until(event_queue, &event, &timeout);
-
-        if(get_event) {
-            switch(event.type) {
+        if(gevt) {
+            switch(evt.type) {
                 case ALLEGRO_EVENT_TIMER:
                     draw = true;
                     break;
                 case ALLEGRO_EVENT_DISPLAY_CLOSE:
-                    running = false;
+                    run = false;
                     break;
-                default:
-                    std::cerr << "Unsupported event: " << event.type << std::endl;
+                case ALLEGRO_EVENT_KEY_DOWN:
+                    switch(evt.keyboard.keycode) {
+                        case ALLEGRO_KEY_UP:
+                            keys[up] = true;
+                            break;
+                        case ALLEGRO_KEY_DOWN:
+                            keys[down] = true;
+                            break;
+                        case ALLEGRO_KEY_LEFT:
+                            keys[left] = true;
+                            break;
+                        case ALLEGRO_KEY_RIGHT:
+                            keys[right] = true;
+                            break;
+                        case ALLEGRO_KEY_SPACE:
+                            keys[fire] = true;
+                            break;
+                    }
+                    break;
+                case ALLEGRO_EVENT_KEY_UP:
+                    switch(evt.keyboard.keycode) {
+                        case ALLEGRO_KEY_UP:
+                            keys[up] = false;
+                            break;
+                        case ALLEGRO_KEY_DOWN:
+                            keys[down] = false;
+                            break;
+                        case ALLEGRO_KEY_LEFT:
+                            keys[left] = false;
+                            break;
+                        case ALLEGRO_KEY_RIGHT:
+                            keys[right] = false;
+                            break;
+                        case ALLEGRO_KEY_SPACE:
+                            keys[fire] = false;
+                            break;
+                        case ALLEGRO_KEY_ESCAPE:
+                            destruction();
+                            return 0;
+                    }
                     break;
             }
         }
-
-        if(draw && al_is_event_queue_empty(event_queue)) {
-            al_clear_to_color(al_map_rgb(0, 0, 0));
-            al_draw_bitmap(image, x, y, 0);
-            al_flip_display();
-            draw = false;
-        }
+        drawframe(draw);
     }
 
-    al_destroy_timer(timer);
-    al_destroy_display(display);
-    al_destroy_event_queue(event_queue);
-    al_destroy_bitmap(image);
-
+    al_destroy_timer(tmr);
+    al_destroy_display(dsp);
+    al_destroy_bitmap(buf);
+    al_destroy_event_queue(evq);
+    al_destroy_bitmap(shp);
     return 0;
 }
 
