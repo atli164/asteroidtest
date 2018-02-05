@@ -17,7 +17,7 @@ double frand(double fmin, double fmax) {
 }
 
 double zoom = 1.0;
-int scr_x, scr_y;
+int scr_x = 1000, scr_y = 1000;
 
 ALLEGRO_DISPLAY *dsp = NULL;
 ALLEGRO_EVENT_QUEUE *evq = NULL;
@@ -48,29 +48,17 @@ struct ship {
         cooldown = 0;
     }
 
-    void update(astfield &a) {
-        dv += ddv;
-        dv = std::max(dv, -1.0);
-        dv = std::min(dv, 5.0);
-        phi += dphi;
-        dx = cos(phi) * dv;
-        dy = sin(phi) * dv;
-        cooldown = std::max(0.0, cooldown - 1 / FPS);
-        if(cooldown == 0.0) {
-            a.add_lsr();
-            cooldown = 1;
-        }
-    }
-
     void draw() {
-        double topx = 30 * cos(phi);
-        double topy = 30 * sin(phi);
-        double bot1x = 30 * cos(phi + pi + pi / 12);
-        double bot1y = 30 * sin(phi + pi + pi / 12);
-        double bot2x = 30 * cos(phi + pi - pi / 12);
-        double bot2y = 30 * sin(phi + pi - pi / 12);
+        double topx = 30 * cos(phi) + scr_x / 2;
+        double topy = 30 * sin(phi) + scr_y / 2;
+        double bot1x = 30 * cos(phi + pi + pi / 8) + scr_x / 2;
+        double bot1y = 30 * sin(phi + pi + pi / 8) + scr_y / 2;
+        double bot2x = 30 * cos(phi + pi - pi / 8) + scr_x / 2;
+        double bot2y = 30 * sin(phi + pi - pi / 8) + scr_y / 2;
         al_draw_filled_triangle(topx, topy, bot1x, bot1y, bot2x, bot2y, white);
     }
+
+    void update();
 };
 
 ship player;
@@ -99,7 +87,7 @@ struct asteroid {
     }
 
     void draw() {
-        al_draw_filled_circle(x, y, r, brown);
+        al_draw_filled_circle(x + scr_x / 2, y + scr_y / 2, r, brown);
     }
 };
 
@@ -116,14 +104,14 @@ struct laser {
     
     // Returns whether it should be deleted
     bool update() {
-        x -= player.dx;
-        y -= player.dy;
+        x += dx - player.dx;
+        y += dy - player.dy;
         double dist = hypot(x, y);
         todel = dist > 10000; 
     }
 
     void draw() {
-        al_draw_filled_circle(x, y, 5, red);
+        al_draw_filled_circle(x + scr_x / 2, y + scr_y / 2, 5, red);
     }
 };
 
@@ -197,15 +185,34 @@ struct astfield {
 
 astfield field;
 
+void ship::update() {
+    dv += ddv;
+    dv = std::max(dv, -1.0);
+    dv = std::min(dv, 5.0);
+    phi += dphi;
+    dx = cos(phi) * dv;
+    dy = sin(phi) * dv;
+    cooldown = std::max(0.0, cooldown - 1 / FPS);
+    if(cooldown == 0.0 && firing) {
+        field.add_lsr();
+        cooldown = 1;
+    }
+}
+
+
 void destruction() {
     al_destroy_timer(tmr);
     al_destroy_display(dsp);
     al_destroy_event_queue(evq);
+    field.asts.clear();
+    field.lsrs.clear();
 }
 
 void drawframe(bool &draw) {
     if(draw && al_is_event_queue_empty(evq)) {
         al_clear_to_color(al_map_rgb(0, 0, 0));
+        field.update();
+        player.update();
         field.draw();
         player.draw();
         al_flip_display();
@@ -247,9 +254,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    scr_x = al_get_display_width(dsp);
-    scr_y = al_get_display_height(dsp);
-    al_set_new_display_flags(ALLEGRO_FULLSCREEN_WINDOW);
     dsp = al_create_display(scr_x, scr_y);
     if(!dsp) {
         std::cerr << "Failed to create display." << std::endl;
@@ -303,10 +307,10 @@ int main(int argc, char **argv) {
                         case ALLEGRO_KEY_DOWN:
                             player.ddv = -0.01;
                             break;
-                        case ALLEGRO_KEY_LEFT:
+                        case ALLEGRO_KEY_RIGHT:
                             player.dphi = 0.1;
                             break;
-                        case ALLEGRO_KEY_RIGHT:
+                        case ALLEGRO_KEY_LEFT:
                             player.dphi = -0.1;
                             break;
                         case ALLEGRO_KEY_SPACE:
@@ -322,10 +326,10 @@ int main(int argc, char **argv) {
                         case ALLEGRO_KEY_DOWN:
                             if(player.ddv < 0) player.ddv = 0;
                             break;
-                        case ALLEGRO_KEY_LEFT:
+                        case ALLEGRO_KEY_RIGHT:
                             if(player.dphi > 0) player.dphi = 0;
                             break;
-                        case ALLEGRO_KEY_RIGHT:
+                        case ALLEGRO_KEY_LEFT:
                             if(player.dphi < 0) player.dphi = 0;
                             break;
                         case ALLEGRO_KEY_SPACE:
