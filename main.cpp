@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <algorithm>
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
@@ -35,7 +36,7 @@ struct laser;
 struct ship {
     double dx, dy, dv, ddv, phi, dphi, cooldown;
     bool firing, hit;
-    ship() : {
+    ship() {
         dx = 0;
         dy = 0;
         dv = 0;
@@ -47,16 +48,16 @@ struct ship {
         cooldown = 0;
     }
 
-    void update() {
+    void update(astfield &a) {
         dv += ddv;
-        dv = max(dv, -1);
-        dv = min(dv, 5);
+        dv = std::max(dv, -1.0);
+        dv = std::min(dv, 5.0);
         phi += dphi;
         dx = cos(phi) * dv;
         dy = sin(phi) * dv;
-        cooldown = max(0.0, cooldown - 1 / FPS);
+        cooldown = std::max(0.0, cooldown - 1 / FPS);
         if(cooldown == 0.0) {
-            astfield.add_lsr();
+            a.add_lsr();
             cooldown = 1;
         }
     }
@@ -77,7 +78,7 @@ ship player;
 struct asteroid {
     double x, y, r, dx, dy;
     bool todel;
-    asteroid(double _x, double _y, double _r) : {
+    asteroid(double _x, double _y, double _r) {
         x = _x;
         y = _y;
         r = frand(25, _r);
@@ -105,7 +106,7 @@ struct asteroid {
 struct laser {
     double x, y, dx, dy;
     bool todel;
-    laser() : {
+    laser() {
         x = 0;
         y = 0;
         dx = 10 * cos(player.phi);
@@ -127,9 +128,9 @@ struct laser {
 };
 
 struct astfield {
-    vector<asteroid> asts;
-    vector<laser> lsrs;
-    astfield() : {}
+    std::vector<asteroid> asts;
+    std::vector<laser> lsrs;
+    astfield() {}
 
     void add_ast(double _x, double _y) {
         asts.push_back(asteroid(_x, _y, 150));
@@ -158,7 +159,7 @@ struct astfield {
         }
         erase_asts();
         erase_lsrs();
-        vector<asteroid> newasts;
+        std::vector<asteroid> newasts;
         for(asteroid a : asts) {
             for(laser l : lsrs) {
                 if(hypot(l.x - a.x, l.y - a.y) < a.r) {
@@ -205,9 +206,8 @@ void destruction() {
 void drawframe(bool &draw) {
     if(draw && al_is_event_queue_empty(evq)) {
         al_clear_to_color(al_map_rgb(0, 0, 0));
-        drawship();
-        drawasteroids();
-        drawlasers();
+        field.draw();
+        player.draw();
         al_flip_display();
         draw = false;
     }
@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if(!al_init_primitive_addon()) {
+    if(!al_init_primitives_addon()) {
         std::cerr << "Failed to initialize primitives addon." << std::endl;
         destruction();
         return -1;
@@ -295,11 +295,6 @@ int main(int argc, char **argv) {
                 case ALLEGRO_EVENT_DISPLAY_CLOSE:
                     destruction();
                     return 0;
-                case ALLEGRO_EVENT_DISPLAY_RESIZE:
-                    al_acknowledge_resize(display);
-                    scr_x = al_get_display_width(dsp);
-                    scr_y = al_get_display_height(dsp);
-                    al_resize_display(dsp);
                 case ALLEGRO_EVENT_KEY_DOWN:
                     switch(evt.keyboard.keycode) {
                         case ALLEGRO_KEY_UP:
